@@ -6,8 +6,10 @@
 
 #include <Windows.h>
 #include <d3d11.h>
+#include <d3dcompiler.h>
 
 #pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "d3dcompiler.lib")
 
 // Screen resolution
 #define SCREEN_WIDTH 800
@@ -17,7 +19,14 @@
 IDXGISwapChain* swapChain;             // the pointer to the swap chain interface
 ID3D11Device* device;                     // the pointer to our Direct3D device interface
 ID3D11DeviceContext* deviceContext;           // the pointer to our Direct3D device context
-ID3D11RenderTargetView *backBuffer;    // render target
+ID3D11RenderTargetView* backBuffer;    // render target
+
+ID3D11VertexShader* vertexShader;    // pointer to the vertex shader COM object
+ID3D11PixelShader* pixelShader;     // pointer to the pixel shader COM object
+
+ID3D11Buffer* vertexBuffer;
+
+ID3D11InputLayout* inputLayout;
 
 // function prototypes
 void InitD3D(HWND hWindow);     // sets up and initializes Direct3D
@@ -25,6 +34,14 @@ void CleanD3D();                // closes Direct3D and releases memory
 void RenderFrame();
 
 LRESULT CALLBACK WinProc(HWND hWindow, UINT message, WPARAM wParam, LPARAM lParam);
+
+#define SAFE_RELEASE(a) if((a) != NULL) (a)->Release();
+
+struct Vertex
+{
+    FLOAT x, y, z; // Position
+    FLOAT color[4];
+};
 
 /*
     WinMain (handle app startup)
@@ -129,6 +146,66 @@ LRESULT CALLBACK WinProc(HWND hWindow, UINT message, WPARAM wParam, LPARAM lPara
     return DefWindowProc(hWindow, message, wParam, lParam);
 }
 
+void initShaders()
+{
+    // load and compile the vertex and pixel shaders
+    ID3D10Blob* vs;
+    ID3D10Blob* ps;
+    // TODO : Handle return value (check for errors) [last param returns a blob to handle compiler errors]
+    // TODO : Take a look at CreatePixelShader and pre-compiling shaders
+    D3DCompileFromFile(L"VertexShader.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", 
+                       "vs_4_0", 0, 0, &vs, NULL);
+    D3DCompileFromFile(L"PixelShader.hlsl", NULL, D3D_COMPILE_STANDARD_FILE_INCLUDE, "main", 
+                       "ps_4_0", 0, 0, &ps, NULL);
+
+    // Create shaders from blobs
+    device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), NULL, &vertexShader);
+    device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), NULL, &pixelShader);
+
+    // Set the active shaders
+    deviceContext->VSSetShader(vertexShader, NULL, 0);
+    deviceContext->PSSetShader(pixelShader, NULL, 0);
+
+    // Init shader input layer (i.e. input we're going to send to vertex shader)
+    D3D11_INPUT_ELEMENT_DESC ied[] =
+    {
+        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, 
+            D3D11_INPUT_PER_VERTEX_DATA, 0},
+    };
+
+    device->CreateInputLayout(ied, 2, vs->GetBufferPointer(), vs->GetBufferSize(), &inputLayout);
+    deviceContext->IASetInputLayout(inputLayout);
+}
+
+void InitGraphics()
+{
+    // create a triangle using the VERTEX struct
+    Vertex vertices[] =
+    {
+        {0.0f, 0.5f, 0.0f, {1.0f, 0.0f, 0.0f, 1.0f}},
+        {0.45f, -0.5, 0.0f, {0.0f, 1.0f, 0.0f, 1.0f}},
+        {-0.45f, -0.5f, 0.0f, {0.0f, 0.0f, 1.0f, 1.0f}}
+    };
+
+    // create the vertex buffer
+    D3D11_BUFFER_DESC bd;
+    ZeroMemory(&bd, sizeof(bd));
+
+    bd.Usage = D3D11_USAGE_DYNAMIC;                // write access access by CPU and GPU
+    bd.ByteWidth = sizeof(Vertex) * 3;             // size is the VERTEX struct * 3
+    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;       // use as a vertex buffer
+    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
+
+    device->CreateBuffer(&bd, NULL, &vertexBuffer); // create the buffer
+
+    // copy the vertices into the buffer
+    D3D11_MAPPED_SUBRESOURCE ms;
+    deviceContext->Map(vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); // map the buffer
+    memcpy(ms.pData, vertices, sizeof(vertices));                               // copy the data
+    deviceContext->Unmap(vertexBuffer, NULL);                                   // unmap the buffer
+}
+
 // this function initializes and prepares Direct3D for use
 void InitD3D(HWND hWindow)
 {
@@ -193,10 +270,12 @@ void CleanD3D()
     swapChain->SetFullscreenState(FALSE, NULL);    
 
     // close and release all existing COM objects
-    swapChain->Release();
-    backBuffer->Release();
-    device->Release();
-    deviceContext->Release();
+    SAFE_RELEASE(vertexShader);
+    SAFE_RELEASE(pixelShader);
+    SAFE_RELEASE(swapChain);
+    SAFE_RELEASE(backBuffer);
+    SAFE_RELEASE(device);
+    SAFE_RELEASE(deviceContext);
 }
 
 // this is the function used to render a single frame
@@ -207,7 +286,17 @@ void RenderFrame(void)
     // clear the back buffer to "color"
     deviceContext->ClearRenderTargetView(backBuffer, color);
 
-    // do 3D rendering on the back buffer here
+    // do 3D rendering on the back buffer
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    deviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+
+    // select which primtive type we are using
+    deviceContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
+    // draw the vertex buffer to the back buffer
+    deviceContext->Draw(3, 0);
 
     // switch the back buffer and the front buffer
     swapChain->Present(0, 0);
