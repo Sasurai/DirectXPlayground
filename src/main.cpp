@@ -35,7 +35,7 @@ void RenderFrame();
 
 LRESULT CALLBACK WinProc(HWND hWindow, UINT message, WPARAM wParam, LPARAM lParam);
 
-#define SAFE_RELEASE(a) if((a) != NULL) (a)->Release();
+#define SAFE_RELEASE(a) if((a) != NULL){ (a)->Release(); (a) = NULL; }
 
 struct Vertex
 {
@@ -261,6 +261,9 @@ void InitD3D(HWND hWindow)
     viewport.Height = SCREEN_HEIGHT;
 
     deviceContext->RSSetViewports(1, &viewport);
+
+    initShaders();
+    InitGraphics();
 }
 
 // this is the function that cleans up Direct3D and COM
@@ -270,8 +273,10 @@ void CleanD3D()
     swapChain->SetFullscreenState(FALSE, NULL);    
 
     // close and release all existing COM objects
+    SAFE_RELEASE(inputLayout);
     SAFE_RELEASE(vertexShader);
     SAFE_RELEASE(pixelShader);
+    SAFE_RELEASE(vertexBuffer);
     SAFE_RELEASE(swapChain);
     SAFE_RELEASE(backBuffer);
     SAFE_RELEASE(device);
