@@ -58,7 +58,7 @@ void Renderer::initD3D(HWND hWindow)
     scd.BufferDesc.Height = kScreenHeight;                  // set the back buffer height
     scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;      // how swap chain is to be used
     scd.OutputWindow = hWindow;                             // the window to be used
-    scd.SampleDesc.Count = 4;                               // how many multisamples
+    scd.SampleDesc.Count = 1;                               // how many multisamples
     scd.Windowed = TRUE;                                    // windowed/full-screen mode
     scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;     // allow full-screen switching
 
@@ -206,6 +206,13 @@ void Renderer::initScene()
     _deviceContext->Map(_vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); // map the buffer
     memcpy(ms.pData, vertices, sizeof(vertices));                               // copy the data
     _deviceContext->Unmap(_vertexBuffer, NULL);                                   // unmap the buffer
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    _deviceContext->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
+
+    // select which primtive type we are using
+    _deviceContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 void Renderer::renderFrame()
@@ -216,14 +223,6 @@ void Renderer::renderFrame()
     _deviceContext->ClearRenderTargetView(_backBuffer, color);
     // clear the depth buffer to 1 (farthest)
     _deviceContext->ClearDepthStencilView(_depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-
-    // do 3D rendering on the back buffer
-    UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-    _deviceContext->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
-
-    // select which primtive type we are using
-    _deviceContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // draw the vertex buffer to the back buffer
     // Parameters are size, offset in index buffer, offset in vertex buffer
