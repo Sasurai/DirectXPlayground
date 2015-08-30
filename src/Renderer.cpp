@@ -11,9 +11,12 @@ Renderer::Renderer()
     , _device(nullptr)
     , _deviceContext(nullptr)
     , _backBuffer(nullptr)
+    , _depthStencilView(nullptr)
     , _vertexShader(nullptr)
     , _pixelShader(nullptr)
+    , _indexBuffer(nullptr)
     , _vertexBuffer(nullptr)
+    , _depthStencilBuffer(nullptr)
     , _inputLayout(nullptr)
 {
 }
@@ -32,8 +35,10 @@ Renderer::~Renderer()
     safeRelease(_pixelShader);
     safeRelease(_vertexBuffer);
     safeRelease(_indexBuffer);
+    safeRelease(_depthStencilBuffer);
     safeRelease(_swapChain);
     safeRelease(_backBuffer);
+    safeRelease(_depthStencilView);
     safeRelease(_device);
     safeRelease(_deviceContext);
 }
@@ -79,8 +84,26 @@ void Renderer::initD3D(HWND hWindow)
     _device->CreateRenderTargetView(pBackBuffer, NULL, &_backBuffer);
     pBackBuffer->Release();
 
+    //Describe our Depth/Stencil Buffer
+    D3D11_TEXTURE2D_DESC depthStencilDesc;
+
+    depthStencilDesc.Width = kScreenWidth;
+    depthStencilDesc.Height = kScreenHeight;
+    depthStencilDesc.MipLevels = 1;
+    depthStencilDesc.ArraySize = 1;
+    depthStencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    depthStencilDesc.SampleDesc.Count = 1;
+    depthStencilDesc.SampleDesc.Quality = 0;
+    depthStencilDesc.Usage = D3D11_USAGE_DEFAULT;
+    depthStencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    depthStencilDesc.CPUAccessFlags = 0;
+    depthStencilDesc.MiscFlags = 0;
+
+    _device->CreateTexture2D(&depthStencilDesc, NULL, &_depthStencilBuffer);
+    _device->CreateDepthStencilView(_depthStencilBuffer, NULL, &_depthStencilView);
+
     // set the render target as the back buffer
-    _deviceContext->OMSetRenderTargets(1, &_backBuffer, NULL);
+    _deviceContext->OMSetRenderTargets(1, &_backBuffer, _depthStencilView);
 
     // Set the viewport
     D3D11_VIEWPORT viewport;
@@ -90,6 +113,8 @@ void Renderer::initD3D(HWND hWindow)
     viewport.TopLeftY = 0;
     viewport.Width = kScreenWidth;
     viewport.Height = kScreenHeight;
+    viewport.MinDepth = 0.0f;
+    viewport.MaxDepth = 1.0f;
 
     _deviceContext->RSSetViewports(1, &viewport);
 
@@ -176,7 +201,7 @@ void Renderer::initScene()
     _device->CreateBuffer(&indexBufferDesc, &iinitData, &_indexBuffer);
     _deviceContext->IASetIndexBuffer(_indexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
-    // copy the vertices into the buffer
+    // copy the vertices into the vertex buffer
     D3D11_MAPPED_SUBRESOURCE ms;
     _deviceContext->Map(_vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); // map the buffer
     memcpy(ms.pData, vertices, sizeof(vertices));                               // copy the data
@@ -189,9 +214,10 @@ void Renderer::renderFrame()
     FLOAT color[4] = {0.0f, 0.2f, 0.4f, 1.0f};
     // clear the back buffer to "color"
     _deviceContext->ClearRenderTargetView(_backBuffer, color);
+    // clear the depth buffer to 1 (farthest)
+    _deviceContext->ClearDepthStencilView(_depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
     // do 3D rendering on the back buffer
-
     UINT stride = sizeof(Vertex);
     UINT offset = 0;
     _deviceContext->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
