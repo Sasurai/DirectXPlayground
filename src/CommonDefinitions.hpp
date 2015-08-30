@@ -13,6 +13,11 @@ struct Vertex
 {
     FLOAT x, y, z; // Position
     FLOAT color[4];
+    Vertex(FLOAT nx, FLOAT ny, FLOAT nz, FLOAT r, FLOAT g, FLOAT b, FLOAT alpha)
+        : x(nx), y(ny), z(nz), color()
+    {
+        color[0] = r; color[1] = g; color[2] = b; color[3] = alpha;
+    }
 };
 
 void inline safeRelease(IUnknown* comObject)

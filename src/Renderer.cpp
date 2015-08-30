@@ -31,6 +31,7 @@ Renderer::~Renderer()
     safeRelease(_vertexShader);
     safeRelease(_pixelShader);
     safeRelease(_vertexBuffer);
+    safeRelease(_indexBuffer);
     safeRelease(_swapChain);
     safeRelease(_backBuffer);
     safeRelease(_device);
@@ -126,30 +127,56 @@ void Renderer::initShaders()
 
     _device->CreateInputLayout(ied, 2, vs->GetBufferPointer(), vs->GetBufferSize(), &_inputLayout);
     _deviceContext->IASetInputLayout(_inputLayout);
+
+    vs->Release();
+    ps->Release();
 }
 
 void Renderer::initScene()
 {
-    // create a triangle using the VERTEX struct
+    // Create array of vertices to draw geometry
     Vertex vertices[] =
     {
-        {0.0f, 0.5f, 0.0f,{1.0f, 0.0f, 0.0f, 1.0f}},
-        {0.45f, -0.5, 0.0f,{0.0f, 1.0f, 0.0f, 1.0f}},
-        {-0.45f, -0.5f, 0.0f,{0.0f, 0.0f, 1.0f, 1.0f}}
+        Vertex(-0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f),
+        Vertex(-0.5f,  0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f),
+        Vertex(0.5f,  0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f),
+        Vertex(0.5f, -0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f)
     };
 
     // create the vertex buffer
-    D3D11_BUFFER_DESC bd;
-    ZeroMemory(&bd, sizeof(bd));
+    D3D11_BUFFER_DESC vertexBufferDesc;
+    ZeroMemory(&vertexBufferDesc, sizeof(vertexBufferDesc));
 
-    bd.Usage = D3D11_USAGE_DYNAMIC;                // write access by CPU and GPU
-    bd.ByteWidth = sizeof(Vertex) * 3;             // size is the VERTEX struct * 3
-    bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;       // use as a vertex buffer
-    bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
+    vertexBufferDesc.Usage = D3D11_USAGE_DYNAMIC;                // write access by CPU and GPU
+    vertexBufferDesc.ByteWidth = sizeof(Vertex) * 4;             // size is the VERTEX * vlength
+    vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;       // use as a vertex buffer
+    vertexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
 
-    _device->CreateBuffer(&bd, NULL, &_vertexBuffer); // create the buffer
+    // Create the vertices buffer
+    _device->CreateBuffer(&vertexBufferDesc, NULL, &_vertexBuffer);
 
-                                                    // copy the vertices into the buffer
+    // Create indexes to draw using the defined vertices
+    DWORD indices[] = {
+        0, 1, 2,
+        0, 2, 3,
+    };
+
+    D3D11_BUFFER_DESC indexBufferDesc;
+    ZeroMemory(&indexBufferDesc, sizeof(indexBufferDesc));
+
+    indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+    indexBufferDesc.ByteWidth = sizeof(DWORD) * 2 * 3;
+    indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+    indexBufferDesc.CPUAccessFlags = 0;
+    indexBufferDesc.MiscFlags = 0;
+
+    // Create the indices buffer
+    D3D11_SUBRESOURCE_DATA iinitData;
+    iinitData.pSysMem = indices;
+    _device->CreateBuffer(&indexBufferDesc, &iinitData, &_indexBuffer);
+    _deviceContext->IASetIndexBuffer(_indexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+    // copy the vertices into the buffer
     D3D11_MAPPED_SUBRESOURCE ms;
     _deviceContext->Map(_vertexBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); // map the buffer
     memcpy(ms.pData, vertices, sizeof(vertices));                               // copy the data
@@ -170,10 +197,11 @@ void Renderer::renderFrame()
     _deviceContext->IASetVertexBuffers(0, 1, &_vertexBuffer, &stride, &offset);
 
     // select which primtive type we are using
-    _deviceContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    _deviceContext->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     // draw the vertex buffer to the back buffer
-    _deviceContext->Draw(3, 0);
+    // Parameters are size, offset in index buffer, offset in vertex buffer
+    _deviceContext->DrawIndexed(6, 0, 0); 
 
     // switch the back buffer and the front buffer
     _swapChain->Present(0, 0);

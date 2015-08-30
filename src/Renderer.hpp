@@ -17,7 +17,9 @@ private:
     ID3D11VertexShader* _vertexShader;    // pointer to the vertex shader COM object
     ID3D11PixelShader* _pixelShader;     // pointer to the pixel shader COM object
 
-    ID3D11Buffer* _vertexBuffer;
+    ID3D11Buffer* _indexBuffer;         // Index buffer for re-using vertices
+    ID3D11Buffer* _vertexBuffer;        // Vertex buffer
+
     ID3D11InputLayout* _inputLayout;    // Feed vertex from vertex buffer to the vertex shader
 
     void initShaders();
