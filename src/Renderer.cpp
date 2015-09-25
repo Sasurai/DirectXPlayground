@@ -18,6 +18,7 @@ Renderer::Renderer()
     , _vertexBuffer(nullptr)
     , _depthStencilBuffer(nullptr)
     , _inputLayout(nullptr)
+    , _perObjectCBuffer(nullptr)
 {
 }
 
@@ -41,6 +42,7 @@ Renderer::~Renderer()
     safeRelease(_depthStencilView);
     safeRelease(_device);
     safeRelease(_deviceContext);
+    safeRelease(_perObjectCBuffer);
 }
 
 void Renderer::initD3D(HWND hWindow)
@@ -117,6 +119,31 @@ void Renderer::initD3D(HWND hWindow)
     viewport.MaxDepth = 1.0f;
 
     _deviceContext->RSSetViewports(1, &viewport);
+
+    //Create the buffer to send to the constant buffer to shader
+    D3D11_BUFFER_DESC cbbd;
+    ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
+
+    cbbd.Usage = D3D11_USAGE_DEFAULT;
+    cbbd.ByteWidth = sizeof(CBufferPerObject);
+    cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    cbbd.CPUAccessFlags = 0;
+    cbbd.MiscFlags = 0;
+
+    _device->CreateBuffer(&cbbd, NULL, &_perObjectCBuffer);
+
+    //Camera information
+    _camPositionVec = DirectX::XMVectorSet(0.0f, 0.0f, -0.5f, 0.0f);
+    _camTargetVec = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+    _camUpVec = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+
+    //Set the View matrix
+    _camViewMatrix = DirectX::XMMatrixLookAtLH(_camPositionVec, _camTargetVec, _camUpVec);
+
+    //Set the Projection matrix
+    _camProjectionMatrix = DirectX::XMMatrixPerspectiveFovLH(0.4f*3.14f, 
+                                                             (float)kScreenWidth / kScreenHeight, 
+                                                             1.0f, 1000.0f);
 
     initShaders();
     initScene();
@@ -223,6 +250,14 @@ void Renderer::renderFrame()
     _deviceContext->ClearRenderTargetView(_backBuffer, color);
     // clear the depth buffer to 1 (farthest)
     _deviceContext->ClearDepthStencilView(_depthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
+    //Set the World/View/Projection matrix, then send it to constant buffer in effect file
+    // (The world matrix should be object dependent)
+    _worldMatrix = DirectX::XMMatrixIdentity();
+    _wvpMatrix = _worldMatrix * _camViewMatrix * _camProjectionMatrix;
+    _cBufferPerObject.WVP = DirectX::XMMatrixTranspose(_wvpMatrix);
+    _deviceContext->UpdateSubresource(_perObjectCBuffer, 0, NULL, &_cBufferPerObject, 0, 0);
+    _deviceContext->VSSetConstantBuffers(0, 1, &_perObjectCBuffer);
 
     // draw the vertex buffer to the back buffer
     // Parameters are size, offset in index buffer, offset in vertex buffer

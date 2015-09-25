@@ -1,5 +1,6 @@
 #pragma once
 #include <d3d11.h>
+#include <DirectXMath.h>
 
 /**
  * Renderer class takes care of initializing the graphics (and shaders), rendering, 
@@ -8,6 +9,24 @@
 class Renderer
 {
 private:
+    struct CBufferPerObject
+    {
+        DirectX::XMMATRIX WVP; // World view projection matrix
+    };
+
+    // Camera transformation matrixes
+    DirectX::XMMATRIX _wvpMatrix;
+    DirectX::XMMATRIX _worldMatrix;
+    DirectX::XMMATRIX _camViewMatrix;
+    DirectX::XMMATRIX _camProjectionMatrix;
+
+    DirectX::XMVECTOR _camPositionVec;
+    DirectX::XMVECTOR _camTargetVec;
+    DirectX::XMVECTOR _camUpVec;
+
+    // Object wvp matrix, each object should probably have its own
+    CBufferPerObject _cBufferPerObject;
+
     IDXGISwapChain* _swapChain;             // the pointer to the swap chain interface
 
     ID3D11Device* _device;                    // the pointer to our Direct3D device interface
@@ -23,6 +42,8 @@ private:
     ID3D11Texture2D* _depthStencilBuffer;
 
     ID3D11InputLayout* _inputLayout;    // Feed vertex from vertex buffer to the vertex shader
+
+    ID3D11Buffer* _perObjectCBuffer;    // Constant buffer with object transformations
 
     void initShaders();
     void initScene();
